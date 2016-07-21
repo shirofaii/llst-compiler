@@ -1,0 +1,20 @@
+{
+  "name": "llst-compiler",
+  "version": "0.1.0",
+  "description": "",
+  "main": "src/llst-compiler.js",
+  "repository": "http://github.com/shirofaii/llst-compiler",
+  "dependencies": {
+    "pegjs": "^0.9.0"
+  },
+  "devDependencies": {
+    "gulp": "^3.9.1"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "gulp",
+    "start": ""
+  },
+  "author": "",
+  "license": "MIT"
+}

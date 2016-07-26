@@ -10,7 +10,16 @@ gulp.task('pegjs', function() {
     gulp
       .src(paths.peg)
       .pipe(
-          pegjs().on('error', console.log)
+          pegjs({allowedStartRules: [
+              'method',
+              'comments',
+              'identifier',
+              'className',
+              'string',
+              'symbol',
+              'number',
+              'literalArray'
+          ]}).on('error', console.log)
       )
       .pipe(
           gulp.dest(paths.build)

@@ -63,15 +63,15 @@ n:(float / integer)
 }
 
 float 'float' =
-neg:[-]?int:integer "." dec:integer
+neg:[-+]?int:integer "." dec:$([0-9]+)
 {
     return parseFloat((neg+int+"."+dec), 10)
 }
 
 integer 'integer' =
-neg:[-]?digits:[0-9]+
+neg:[-+]?digits:$([0-9]+)
 {
-    return parseInt((neg || '')+digits.join(""), 10)
+    return parseInt((neg || '') + digits, 10)
 }
 
 literalArray 'literal array' =

@@ -19,6 +19,9 @@ start = method
 separator 'space' =
 [ \t\v\f\u00A0\uFEFF\n\r\u2028\u2029]+
 
+notSeparator 'not space' =
+[^ \t\v\f\u00A0\uFEFF\n\r\u2028\u2029]+
+
 comments 'comment' =
 (["][^"]*["])+
 
@@ -42,15 +45,26 @@ string 'string' =
 ['] val:(("''" {return "'"} / [^'])*) [']
 {
     return node('string', {
-        value: val.join("").replace(/\"/ig, '"')
+        value: val.join('')
     })
 }
 
 symbol 'symbol' =
-"#"val:$([a-zA-Z0-9]*)
+symbolFull / symbolShort
+
+symbolFull =
+"#" val:string
+{
+	return node('symbol', {
+        value: val.value
+    })
+}
+
+symbolShort =
+"#" val:$([^#'" \t\v\f\u00A0\uFEFF\n\r\u2028\u2029]+)
 {
     return node('symbol', {
-        value: val.replace(/\"/ig, '"')
+        value: val
     })
 }
 

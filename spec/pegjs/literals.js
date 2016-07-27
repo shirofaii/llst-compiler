@@ -12,6 +12,9 @@ describe('llst literals grammar', function() {
     var parseString = text => parse('string', text)
     var tryParseString = function(text) { return () => {parseString(text)} }
     
+    var parseSymbol = text => parse('symbol', text)
+    var tryParseSymbol = function(text) { return () => {parseSymbol(text)} }
+    
     it('integers', function() {
         expect(parseNumber('123')).node('number')
         expect(parseNumber('123')).nodeWithValue(123)
@@ -56,15 +59,42 @@ describe('llst literals grammar', function() {
         expect(parseString("'Testing «ταБЬℓσ»: 1<2 & 4+1>3, now 20% off!'")).nodeWithValue('Testing «ταБЬℓσ»: 1<2 & 4+1>3, now 20% off!')
         expect(parseString("''''")).nodeWithValue("\'")
         expect(parseString("'\"'")).nodeWithValue("\"")
+        expect(parseString("'\\\"'")).nodeWithValue("\\\"")
         
-        expect(tryParseNumber("abc")).toThrowError(SyntaxError)
-        expect(tryParseNumber("\"abc\"")).toThrowError(SyntaxError)
-        expect(tryParseNumber("'abc")).toThrowError(SyntaxError)
-        expect(tryParseNumber("a'bc")).toThrowError(SyntaxError)
-        expect(tryParseNumber("a'bc'")).toThrowError(SyntaxError)
-        expect(tryParseNumber("abc'")).toThrowError(SyntaxError)
-        expect(tryParseNumber("'''")).toThrowError(SyntaxError)
+        expect(tryParseString("abc")).toThrowError(SyntaxError)
+        expect(tryParseString("\"abc\"")).toThrowError(SyntaxError)
+        expect(tryParseString("'abc")).toThrowError(SyntaxError)
+        expect(tryParseString("a'bc")).toThrowError(SyntaxError)
+        expect(tryParseString("a'bc'")).toThrowError(SyntaxError)
+        expect(tryParseString("abc'")).toThrowError(SyntaxError)
+        expect(tryParseString("'''")).toThrowError(SyntaxError)
+        expect(tryParseString("")).toThrowError(SyntaxError)
+        expect(tryParseString("'")).toThrowError(SyntaxError)
     })
     
-    
+    it('symbol', function() {
+        expect(parseSymbol("#123")).node('symbol')
+        expect(parseSymbol("#123")).nodeWithValue('123')
+        expect(parseSymbol("#''")).nodeWithValue('')
+        expect(parseSymbol("#' '")).nodeWithValue(' ')
+        expect(parseSymbol("#'abc'")).nodeWithValue('abc')
+        expect(parseSymbol("#abc")).nodeWithValue('abc')
+        expect(parseSymbol("#' 1aBC'")).nodeWithValue(' 1aBC')
+        expect(parseSymbol("#'Testing «ταБЬℓσ»: 1<2 & 4+1>3, now 20% off!'")).nodeWithValue('Testing «ταБЬℓσ»: 1<2 & 4+1>3, now 20% off!')
+        expect(parseSymbol("#''''")).nodeWithValue("\'")
+        expect(parseSymbol("#'\"'")).nodeWithValue("\"")
+        expect(parseSymbol("#'#'")).nodeWithValue("#")
+        
+        expect(tryParseSymbol("#ab c")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("#\"abc\"")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("#'abc")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("#a'bc")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("#a'bc'")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("#abc'")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("#'''")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("#")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("##")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("# ")).toThrowError(SyntaxError)
+    })
+
 });

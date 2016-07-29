@@ -17,6 +17,10 @@ describe('llst literals grammar', function() {
     
     var parseChar = text => parse('character', text)
     var tryParseChar = function(text) { return () => {parseChar(text)} }
+    
+    var parseBool = text => parse('pseudoVariable', text)
+    var tryParseBool = function(text) { return () => {parseBool(text)} }
+
 
     it('integers', function() {
         expect(parseNumber('123')).node('number')
@@ -119,4 +123,16 @@ describe('llst literals grammar', function() {
         expect(tryParseChar("$\0")).toThrowError(SyntaxError)
     })
 
+    it('pseudoVariable', function() {
+        expect(parseBool("true")).node('bool')
+        expect(parseBool("true")).nodeWithValue(true)
+        expect(parseBool("false")).nodeWithValue(false)
+        expect(parseBool("nil")).nodeWithValue(null)
+        
+        expect(tryParseBool("null")).toThrowError(SyntaxError)
+        expect(tryParseBool("")).toThrowError(SyntaxError)
+        expect(tryParseBool("self")).toThrowError(SyntaxError)
+        expect(tryParseBool("super")).toThrowError(SyntaxError)
+        expect(tryParseBool("True")).toThrowError(SyntaxError)
+    })
 });

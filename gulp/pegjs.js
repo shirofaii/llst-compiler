@@ -18,7 +18,8 @@ gulp.task('pegjs', function() {
               'string',
               'symbol',
               'number',
-              'literalArray'
+              'literalArray',
+              'character'
           ]}).on('error', console.log)
       )
       .pipe(

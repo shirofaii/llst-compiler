@@ -15,6 +15,9 @@ describe('llst literals grammar', function() {
     var parseSymbol = text => parse('symbol', text)
     var tryParseSymbol = function(text) { return () => {parseSymbol(text)} }
     
+    var parseChar = text => parse('character', text)
+    var tryParseChar = function(text) { return () => {parseChar(text)} }
+
     it('integers', function() {
         expect(parseNumber('123')).node('number')
         expect(parseNumber('123')).nodeWithValue(123)
@@ -95,6 +98,25 @@ describe('llst literals grammar', function() {
         expect(tryParseSymbol("#")).toThrowError(SyntaxError)
         expect(tryParseSymbol("##")).toThrowError(SyntaxError)
         expect(tryParseSymbol("# ")).toThrowError(SyntaxError)
+    })
+
+    it('character', function() {
+        expect(parseChar("$1")).node('character')
+        expect(parseChar("$1")).nodeWithValue('1')
+        expect(parseChar("$a")).nodeWithValue('a')
+        expect(parseChar("$A")).nodeWithValue('A')
+        expect(parseChar("$$")).nodeWithValue('$')
+        expect(parseChar("$\'")).nodeWithValue('\'')
+        expect(parseChar("$\"")).nodeWithValue('\"')
+        expect(parseChar("$Б")).nodeWithValue('Б')
+        expect(parseChar("$ ")).nodeWithValue(' ')
+        expect(parseChar("$\t")).nodeWithValue("\t")
+        expect(parseChar("$^")).nodeWithValue("^")
+        
+        expect(tryParseChar("$")).toThrowError(SyntaxError)
+        expect(tryParseChar("$\n")).toThrowError(SyntaxError)
+        expect(tryParseChar("$\r")).toThrowError(SyntaxError)
+        expect(tryParseChar("$\0")).toThrowError(SyntaxError)
     })
 
 });

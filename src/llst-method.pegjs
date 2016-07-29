@@ -39,7 +39,7 @@ first:[A-Z] others:[a-zA-Z0-9]* {return first + others.join("")}
 
 //litrals
 literal 'literal' =
-pseudoVariable / number / literalArray / string / symbol / block
+pseudoVariable / number / literalArray / string / symbol / block / character
 
 string 'string' =
 ['] val:(("''" {return "'"} / [^'])*) [']
@@ -64,6 +64,14 @@ symbolShort =
 "#" val:$([^#'" \t\v\f\u00A0\uFEFF\n\r\u2028\u2029]+)
 {
     return node('symbol', {
+        value: val
+    })
+}
+
+character 'character' =
+"$" val:[^\n\r\0]
+{
+    return node('character', {
         value: val
     })
 }

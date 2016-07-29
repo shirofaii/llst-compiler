@@ -19,9 +19,6 @@ start = method
 separator 'space' =
 [ \t\v\f\u00A0\uFEFF\n\r\u2028\u2029]+
 
-notSeparator 'not space' =
-[^ \t\v\f\u00A0\uFEFF\n\r\u2028\u2029]+
-
 comments 'comment' =
 (["][^"]*["])+
 
@@ -53,10 +50,10 @@ symbol 'symbol' =
 symbolFull / symbolShort
 
 symbolFull =
-"#" val:string
+"#" str:string
 {
 	return node('symbol', {
-        value: val.value
+        value: str.value
     })
 }
 

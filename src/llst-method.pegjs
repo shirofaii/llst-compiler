@@ -58,7 +58,7 @@ symbolFull =
 }
 
 symbolShort =
-"#" val:$([^#'" \t\v\f\u00A0\uFEFF\n\r\u2028\u2029]+)
+"#" val:$([^#'"({ \t\v\f\u00A0\uFEFF\n\r\u2028\u2029]+)
 {
     return node('symbol', {
         value: val
@@ -93,14 +93,6 @@ neg:[-+]?digits:$([0-9]+)
     return parseInt((neg || '') + digits, 10)
 }
 
-literalArray 'literal array' =
-"#(" ws lits:(lit:literal ws {return lit})* ws ")"
-{
-    return node('literalArray', {
-        value: lits
-    })
-}
-
 pseudoVariable 'pseudo variable' =
 val:('true' {return true} / 'false' {return false} / 'nil' {return null})
 {
@@ -109,7 +101,32 @@ val:('true' {return true} / 'false' {return false} / 'nil' {return null})
     })
 }
 
+literalArray 'literal array' =
+"#(" ws lits:(lit:literalsInArray ws {return lit})* ws ")"
+{
+    return node('literalArray', {
+        nodes: lits
+    })
+}
 
+literalsInArray =
+pseudoVariable / number / literalArray / string / symbol / character / inArraySymbol / inArrayArray
+
+inArraySymbol = 
+val:$([^#'"({})$ \t\v\f\u00A0\uFEFF\n\r\u2028\u2029]+)
+{
+    return node('symbol', {
+        value: val
+    })
+}
+
+inArrayArray = 
+"(" ws lits:(lit:literalsInArray ws {return lit})* ws ")"
+{
+    return node('literalArray', {
+        nodes: lits
+    })
+}
 
 
 variable 'variable' =

@@ -21,6 +21,8 @@ describe('llst literals grammar', function() {
     var parseBool = text => parse('pseudoVariable', text)
     var tryParseBool = function(text) { return () => {parseBool(text)} }
 
+    var parseArray = text => parse('literalArray', text)
+    var tryParseArray = function(text) { return () => {parseArray(text)} }
 
     it('integers', function() {
         expect(parseNumber('123')).node('number')
@@ -102,6 +104,8 @@ describe('llst literals grammar', function() {
         expect(tryParseSymbol("#")).toThrowError(SyntaxError)
         expect(tryParseSymbol("##")).toThrowError(SyntaxError)
         expect(tryParseSymbol("# ")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("#()")).toThrowError(SyntaxError)
+        expect(tryParseSymbol("#(")).toThrowError(SyntaxError)
     })
 
     it('character', function() {
@@ -135,4 +139,91 @@ describe('llst literals grammar', function() {
         expect(tryParseBool("super")).toThrowError(SyntaxError)
         expect(tryParseBool("True")).toThrowError(SyntaxError)
     })
+    
+    //array
+    it('literalArray', function() {
+        var array = parseArray("#()")
+        expect(array).node('literalArray')
+        expect(array.nodes.length).toBe(0)
+    })
+    it('literalArray', function() {
+        var array = parseArray("#(12)")
+        expect(array.nodes.length).toBe(1)
+        expect(array.nodes[0]).node('number')
+        expect(array.nodes[0]).nodeWithValue(12)
+    })
+    it('literalArray', function() {
+        var array = parseArray("#( 12.2 )")
+        expect(array.nodes.length).toBe(1)
+        expect(array.nodes[0]).node('number')
+        expect(array.nodes[0]).nodeWithValue(12.2)
+    })
+    it('literalArray', function() {
+        var array = parseArray("#( 'nil' #nil $) nil \"nil\" )")
+        expect(array.nodes.length).toBe(4)
+        
+        expect(array.nodes[0]).node('string')
+        expect(array.nodes[0]).nodeWithValue('nil')
+        
+        expect(array.nodes[1]).node('symbol')
+        expect(array.nodes[1]).nodeWithValue('nil')
+        
+        expect(array.nodes[2]).node('character')
+        expect(array.nodes[2]).nodeWithValue(')')
+        
+        expect(array.nodes[3]).node('bool')
+        expect(array.nodes[3]).nodeWithValue(null)
+    })
+    it('literalArray', function() {
+        var array = parseArray("#( #( #(1 2 3) ) #() )")
+        expect(array.nodes.length).toBe(2)
+        
+        expect(array.nodes[0]).node('literalArray')
+        expect(array.nodes[0].nodes.length).toBe(1)
+        expect(array.nodes[0].nodes[0].nodes.length).toBe(3)
+        
+        expect(array.nodes[1]).node('literalArray')
+        expect(array.nodes[1].nodes.length).toBe(0)
+    })
+    it('literalArray', function() {
+        var array = parseArray("#(abc (1 2 3))")
+        expect(array.nodes.length).toBe(2)
+        
+        expect(array.nodes[0]).nodeWithValue('abc')
+        expect(array.nodes[1].nodes.length).toBe(3)
+        expect(array.nodes[1].nodes[0]).nodeWithValue(1)
+        expect(array.nodes[1].nodes[1]).nodeWithValue(2)
+        expect(array.nodes[1].nodes[2]).nodeWithValue(3)
+    })
+    it('literalArray', function() {
+        var array = parseArray("#($ a123 123a [^42.] self)")
+        expect(array.nodes.length).toBe(6)
+        
+        expect(array.nodes[0]).node('character')
+        expect(array.nodes[0]).nodeWithValue(' ')
+        expect(array.nodes[1]).node('symbol')
+        expect(array.nodes[1]).nodeWithValue('a123')
+        expect(array.nodes[2]).node('number')
+        expect(array.nodes[2]).nodeWithValue(123)
+        expect(array.nodes[3]).node('symbol')
+        expect(array.nodes[3]).nodeWithValue('a')
+        expect(array.nodes[4]).node('symbol')
+        expect(array.nodes[4]).nodeWithValue('[^42.]')
+        expect(array.nodes[5]).node('symbol')
+        expect(array.nodes[5]).nodeWithValue('self')
+    })
+    
+    it('literalArrayErrors', function() {
+        expect(tryParseArray("#(")).toThrowError(SyntaxError)
+        expect(tryParseArray("")).toThrowError(SyntaxError)
+        expect(tryParseArray("()")).toThrowError(SyntaxError)
+        expect(tryParseArray("#(#)")).toThrowError(SyntaxError)
+        expect(tryParseArray("#($)")).toThrowError(SyntaxError)
+        expect(tryParseArray("#(')")).toThrowError(SyntaxError)
+        expect(tryParseArray("#(()")).toThrowError(SyntaxError)
+        expect(tryParseArray("#())")).toThrowError(SyntaxError)
+        expect(tryParseArray("#(#\nabv)")).toThrowError(SyntaxError)
+        expect(tryParseArray("#($\n)")).toThrowError(SyntaxError)
+    })
+
 });

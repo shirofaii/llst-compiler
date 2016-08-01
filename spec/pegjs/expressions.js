@@ -105,6 +105,47 @@ describe('llst expression grammar', function() {
             arguments: [{type: 'variable', value: 'aBlock'}]
         })
     })
+    
+    it('cascade message', function() {
+        var msg = parseExpression('self a; b;\n c')
+        expect(msg).node({
+            type: 'cascade',
+            receiver: {type: 'variable', value: 'self'},
+            nodes: [
+                {type: 'send', selector: 'a'},
+                {type: 'send', selector: 'b'},
+                {type: 'send', selector: 'c'}
+            ]
+        })
+    })
+    it('cascade message', function() {
+        var msg = parseExpression('self + 2;- 2;c')
+        expect(msg).node({
+            type: 'cascade',
+            receiver: {type: 'variable', value: 'self'},
+            nodes: [
+                {type: 'send', selector: '+', arguments: [{type: 'number', value: 2}]},
+                {type: 'send', selector: '-', arguments: [{type: 'number', value: 2}]},
+                {type: 'send', selector: 'c'}
+            ]
+        })
+    })
+    it('cascade message', function() {
+        var msg = parseExpression('a load:(3+4);yourself')
+        expect(msg).node({
+            type: 'cascade',
+            receiver: {type: 'variable', value: 'a'},
+            nodes: [
+                {type: 'send', selector: 'load:', arguments: [{
+                    type: 'send',
+                    receiver: {type: 'number', value: 3},
+                    selector: '+',
+                    arguments: [{type: 'number', value: 4}]
+                }]},
+                {type: 'send', selector: 'yourself'}
+            ]
+        })
+    })
 
     
     it('unary message error', function() {
@@ -124,6 +165,12 @@ describe('llst expression grammar', function() {
         expect(tryParseExpression('2 to 2')).toThrowError(SyntaxError)
         expect(tryParseExpression('2 ro:')).toThrowError(SyntaxError)
         expect(tryParseExpression('1 a_b: 2')).toThrowError(SyntaxError)
+    });
+    it('cascade message error', function() {
+        expect(tryParseExpression('test;')).toThrowError(SyntaxError)
+        expect(tryParseExpression('test a;')).toThrowError(SyntaxError)
+        expect(tryParseExpression(';')).toThrowError(SyntaxError)
+        expect(tryParseExpression('test a;;')).toThrowError(SyntaxError)
     });
 
 });

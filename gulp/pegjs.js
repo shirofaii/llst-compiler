@@ -12,9 +12,8 @@ gulp.task('pegjs', function() {
       .pipe(
           pegjs({allowedStartRules: [
               'method',
-              'comments',
-              'identifier',
-              'className',
+              'block',
+              'expression',
               'string',
               'symbol',
               'number',

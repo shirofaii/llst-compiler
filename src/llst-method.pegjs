@@ -372,7 +372,7 @@ method =
 ws pattern:(keywordPattern / binaryPattern / unaryPattern) ws sequence:sequence? ws
 {
     return node('method', {
-        selector: pattern[0],
+        name: pattern[0],
         arguments: pattern[1],
         body: sequence
     })

@@ -84,6 +84,23 @@ function blockNode(orig, stats, args, temps) {
     return result
 }
 
+function methodNode(orig, name, args, temps, stats) {
+    if(orig.type !== 'method') return false
+    if(!temps) temps = []
+    if(orig.arguments.length !== args.length) return false
+    if(orig.body.temps.length !== temps.length) return false
+    
+    var result = orig.name === name
+    // all argements same
+    orig.arguments.forEach((arg, i) => result = result && arg === args[i])
+    // and all vars same
+    orig.body.temps.forEach((tmp, i) => result = result && tmp === temps[i])
+
+    // all instructions are same
+    orig.body.statements.forEach((st, i) => result = result && node(st, stats[i]))
+    return result
+}
+
 
 function node(orig, node) {
     switch(node.type) {
@@ -103,6 +120,7 @@ beforeEach(function () {
         literalNode: function () { return { compare: function (a, b, c) { return { pass: literalNode(a, b, c) } } } },
         sendNode: function () { return { compare: function (a, b) { return { pass: sendNode(a, b) } } } },
         blockNode: function () { return { compare: function (a, b, c, d) { return { pass: blockNode(a, b, c, d) } } } },
+        methodNode: function () { return { compare: function (a, b, c, d, e) { return { pass: methodNode(a, b, c, d, e) } } } },
         assignmentNode: function () { return { compare: function (a, b, c) { return { pass: assignmentNode(a, b, c) } } } },
         primitiveNode: function () { return { compare: function (a, b, c) { return { pass: primitiveNode(a, b, c) } } } },
         cascadeNode: function () { return { compare: function (a, b) { return { pass: cascadeNode(a, b) } } } },

@@ -62,6 +62,10 @@ function assignmentNode(orig, left, right) {
     return node(orig.left, left) && node(orig.right, right)
 }
 
+function returnNode(orig, ret) {
+    return node(orig.value, ret.value)
+}
+
 function blockNode(orig, stats, args, temps) {
     if(orig.type !== 'block') return false
     if(!args) args = []
@@ -71,9 +75,9 @@ function blockNode(orig, stats, args, temps) {
     
     var result = true
     // all argements same
-    orig.arguments.forEach((arg, i) => result = result && node(arg, args[i]))
+    orig.arguments.forEach((arg, i) => result = result && arg === args[i])
     // and all vars same
-    orig.body.temps.forEach((tmp, i) => result = result && node(tmp, temps[i]))
+    orig.body.temps.forEach((tmp, i) => result = result && tmp === temps[i])
 
     // all instructions are same
     orig.body.statements.forEach((st, i) => result = result && node(st, stats[i]))
@@ -85,6 +89,7 @@ function node(orig, node) {
     switch(node.type) {
         case 'send': return sendNode(orig, node)
         case 'cascade': return cascadeNode(orig, node)
+        case 'return': return returnNode(orig, node)
         case 'assignment': return assignmentNode(orig, node.left, node.right)
         case 'primitive': return primitiveNode(orig, node.code, node.arguments)
         case 'blockNode': return blockNode(orig, node.body.statements, node.arguments, node.body.temps)

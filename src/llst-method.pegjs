@@ -251,7 +251,7 @@ block 'block' =
 '[' ws params:blockParamList? ws sequence:sequence? ws ']'
 {
     return node('block', {
-        params: params || [],
+        arguments: params || [],
         body: sequence
     })
 }
@@ -351,8 +351,8 @@ ws send:(keywordSend / binarySend) messages:(ws ";" ws mess:message ws {return m
         cascade.push(messages[i]);
     }
     return node('cascade', {
-        reciever: send.receiver,
-        nodes: cascade
+        receiver: send.receiver,
+        messages: cascade
     })
 }
 

@@ -111,7 +111,7 @@ describe('llst expression grammar', function() {
         expect(msg).node({
             type: 'cascade',
             receiver: {type: 'variable', value: 'self'},
-            nodes: [
+            messages: [
                 {type: 'send', selector: 'a'},
                 {type: 'send', selector: 'b'},
                 {type: 'send', selector: 'c'}
@@ -123,7 +123,7 @@ describe('llst expression grammar', function() {
         expect(msg).node({
             type: 'cascade',
             receiver: {type: 'variable', value: 'self'},
-            nodes: [
+            messages: [
                 {type: 'send', selector: '+', arguments: [{type: 'number', value: 2}]},
                 {type: 'send', selector: '-', arguments: [{type: 'number', value: 2}]},
                 {type: 'send', selector: 'c'}
@@ -135,7 +135,7 @@ describe('llst expression grammar', function() {
         expect(msg).node({
             type: 'cascade',
             receiver: {type: 'variable', value: 'a'},
-            nodes: [
+            messages: [
                 {type: 'send', selector: 'load:', arguments: [{
                     type: 'send',
                     receiver: {type: 'number', value: 3},
@@ -147,6 +147,23 @@ describe('llst expression grammar', function() {
         })
     })
 
+    it('primitive', function() {
+        expect(parseExpression('<0>')).primitiveNode(0)
+        expect(parseExpression('< 12 >')).primitiveNode(12)
+        expect(parseExpression('<444  >')).primitiveNode(444)
+        expect(parseExpression("<12 0>")).primitiveNode(12, [{type: 'number', value: 0}])
+        expect(parseExpression("<12 nil #'as'>")).primitiveNode(12, [{type: 'variable', value: 'nil'}, {type: 'symbol', value: 'as'}])
+    })
+    
+    it('assignment', function() {
+        expect(parseExpression('a <- 2')).assignmentNode({type: 'variable', value: 'a'}, {type: 'number', value: 2})
+        expect(parseExpression('sum<-3+4')).assignmentNode({type: 'variable', value: 'sum'}, {
+            type: 'send',
+            receiver: {type: 'number', value: 3},
+            selector: '+',
+            arguments: [{type: 'number', value: 4}]
+        })
+    })
     
     it('unary message error', function() {
         expect(tryParseExpression('42 selector_with_underscore')).toThrowError(SyntaxError)
@@ -171,6 +188,19 @@ describe('llst expression grammar', function() {
         expect(tryParseExpression('test a;')).toThrowError(SyntaxError)
         expect(tryParseExpression(';')).toThrowError(SyntaxError)
         expect(tryParseExpression('test a;;')).toThrowError(SyntaxError)
+    });
+    it('primitive error', function() {
+        expect(tryParseExpression('<>')).toThrowError(SyntaxError)
+        expect(tryParseExpression('<sin>')).toThrowError(SyntaxError)
+        expect(tryParseExpression('<12 @>')).toThrowError(SyntaxError)
+        expect(tryParseExpression('<12.2>')).toThrowError(SyntaxError)
+    });
+    it('assignment error', function() {
+        expect(tryParseExpression('<- 2')).toThrowError(SyntaxError)
+        expect(tryParseExpression('x<-')).toThrowError(SyntaxError)
+        expect(tryParseExpression('x <- 1 <- 2')).toThrowError(SyntaxError)
+        expect(tryParseExpression('Integer <- nil')).toThrowError(SyntaxError)
+        expect(tryParseExpression('5 <- 4')).toThrowError(SyntaxError)
     });
 
 });

@@ -5,6 +5,7 @@
   "main": "src/llst-compiler.js",
   "repository": "http://github.com/shirofaii/llst-compiler",
   "dependencies": {
+    "lodash": "^4.14.1",
     "pegjs": "^0.9.0"
   },
   "devDependencies": {

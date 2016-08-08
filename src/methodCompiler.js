@@ -147,6 +147,16 @@ class SendNode extends Node {
     toString() {
         return super.toString('#' + this.selector)
     }
+    
+    compile(encoder) {
+        this.receiver.compile(encoder)
+        this.arguments.forEach(a => a.compile(encoder))
+        if(this.receiver.type === 'variable' && this.receiver.name === 'super') {
+            encoder.sendMessageToSuper(this.selector)
+        } else {
+            encoder.send(this.arguments.length, this.selector)
+        }
+    }
 }
 
 class ReturnNode extends Node {
@@ -229,6 +239,9 @@ class VariableNode extends Node {
         }
     }
     index(encoder) {
+        if(this.isArgument(encoder)) {
+            return _.indexOf(encoder.arguments, this.name) + 1 // first argument always self
+        }
         if(this.isInstance(encoder)) {
             return _.indexOf(encoder.insts, this.name)
         }
@@ -239,12 +252,13 @@ class VariableNode extends Node {
     
     compile(encoder) {
         if(this.name === 'self') return encoder.pushSelf()
-        if(this.name === 'super') return encoder.syntaxError('Only can send messages to super', this)
+        if(this.name === 'super') return encoder.pushSelf()
         if(this.name === 'true') return encoder.pushConstant(true)
         if(this.name === 'false') return encoder.pushConstant(false)
         if(this.name === 'nil') return encoder.pushConstant(null)
         
         if(this.isInstance(encoder)) return encoder.pushInstance(this.index(encoder))
+        if(this.isArgument(encoder)) return encoder.pushArgument(this.index(encoder))
         if(this.isTemp(encoder)) return encoder.pushTemp(this.index(encoder))
     }
 }
@@ -495,8 +509,23 @@ class MethodEncoder {
         this.opcode(15, 2)
     }
     // sends
+    sendMessage(argSize, selectorIndex) {
+        this.opcode(9, argSize)
+        this.writeByte(selectorIndex)
+    }
+
     markArguments(size) {
         this.opcode(8, size)
+    }
+    send(size, selector) {
+        this.markArguments(size + 1) // add receiver to arguments count
+        this.literals.push(selector)
+        this.sendMessage(size, this.literals.length - 1)
+    }
+    sendMessageToSuper(selector) {
+        this.opcode(15, 11)
+        this.literals.push(selector)
+        this.writeByte(this.literals.length - 1)
     }
     //pop
     popTop() {

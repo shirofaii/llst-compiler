@@ -42,6 +42,82 @@ describe('llst method grammar', function() {
         
         expect(method.bytecode).toEqual(enc.bytecode)
     })
+    it('method', function() {
+        var method = compile(`
+            test |x|
+            x <- 3 + 4.
+            ^x factorial.
+        `)
+        var enc = new MethodEncoder()
+        
+        enc.pushConstant(3)
+        enc.pushConstant(4)
+        enc.send(1, '+')
+        enc.assignTemporary(0)
+        enc.popTop()
+        enc.pushTemp(0)
+        enc.send(0, 'factorial')
+        enc.stackReturn()
+        
+        expect(method.bytecode).toEqual(enc.bytecode)
+    })
+    it('method', function() {
+        var method = compile(`
+            test: a
+            ^a to: 10
+        `)
+        var enc = new MethodEncoder()
+        
+        enc.pushArgument(1)
+        enc.pushLiteralValue(10)
+        enc.send(1, 'to:')
+        enc.stackReturn()
+        
+        expect(method.bytecode).toEqual(enc.bytecode)
+    })
+    it('method', function() {
+        var method = compile(`
+            test
+            ^self isNumber not
+        `)
+        var enc = new MethodEncoder()
+        
+        enc.pushSelf()
+        enc.send(0, 'isNumber')
+        enc.send(0, 'not')
+        enc.stackReturn()
+        
+        expect(method.bytecode).toEqual(enc.bytecode)
+    })
+    it('method', function() {
+        var method = compile(`
+            test
+            super init.
+            ^self init.
+        `)
+        var enc = new MethodEncoder()
+        
+        enc.pushSelf()
+        enc.sendMessageToSuper('init')
+        enc.popTop()
+        enc.pushSelf()
+        enc.send(0, 'init')
+        enc.stackReturn()
+        
+        expect(method.bytecode).toEqual(enc.bytecode)
+    })
+    it('method', function() {
+        var method = compile(`
+            test
+            ^super.
+        `)
+        var enc = new MethodEncoder()
+        
+        enc.pushSelf()
+        enc.stackReturn()
+        
+        expect(method.bytecode).toEqual(enc.bytecode)
+    })
 
     it('method error', function() {
         var method = `

@@ -3,6 +3,7 @@ const assert = require('assert');
 const parser = require('../build/llst-method.js')
 const _ = require('lodash')
 
+const psedoVariables = ['self', 'super', 'true', 'false', 'nil']
 
 class Node {
     constructor(ast, parent) {
@@ -155,6 +156,15 @@ class ReturnNode extends Node {
         this.value = Node.fromAst(ast.value, this)
     }
     get children() { return [this.value] };
+    
+    compile(encoder) {
+        if(this.value.type === 'variable' && this.value.name === 'self') {
+            return encoder.selfReturn()
+        }
+        this.value.compile(encoder)
+        // have an experssion result on top of the stack
+        return encoder.stackReturn()
+    }
 }
 
 class AssignmentNode extends Node {
@@ -165,7 +175,21 @@ class AssignmentNode extends Node {
         this.left = Node.fromAst(ast.left, this)
         this.right = Node.fromAst(ast.right, this)
     }
+    
     get children() { return [this.left, this.right] };
+    
+    compile(encoder) {
+        if(_.includes(psedoVariables, this.left.name)) {
+            encoder.syntaxError('Cannot assign value to pseudo variable', this.left)
+        }
+        if(_.includes(encoder.arguments, this.left.name)) {
+            encoder.syntaxError('Cannot assign value to argument', this.left)
+        }
+        this.left.check(encoder)
+        this.right.compile(encoder)
+        // now have an expression result on top of the stack
+        this.left.assign(encoder)
+    }
 }
 
 
@@ -178,6 +202,50 @@ class VariableNode extends Node {
     
     toString() {
         return super.toString(this.name)
+    }
+
+    check(encoder) {
+        if(this.isTemp(encoder) || this.isInstance(encoder)) return;
+        
+        encoder.syntaxError('Unknown variable ' + this.name, this, this.name)
+    }
+    
+    isArgument(encoder) {
+        return _.includes(encoder.arguments, this.name)
+    }
+    isInstance(encoder) {
+        return _.includes(encoder.insts, this.name)
+    }
+    isTemp(encoder) {
+        return _.includes(encoder.temps, this.name)
+    }
+    
+    assign(encoder) {
+        if(this.isInstance(encoder)) {
+            return encoder.assignInstance(this.index(encoder))
+        }
+        if(this.isTemp(encoder)) {
+            return encoder.assignTemporary(this.index(encoder))
+        }
+    }
+    index(encoder) {
+        if(this.isInstance(encoder)) {
+            return _.indexOf(encoder.insts, this.name)
+        }
+        if(this.isTemp(encoder)) {
+            return _.indexOf(encoder.temps, this.name)
+        }
+    }
+    
+    compile(encoder) {
+        if(this.name === 'self') return encoder.pushSelf()
+        if(this.name === 'super') return encoder.syntaxError('Only can send messages to super', this)
+        if(this.name === 'true') return encoder.pushConstant(true)
+        if(this.name === 'false') return encoder.pushConstant(false)
+        if(this.name === 'nil') return encoder.pushConstant(null)
+        
+        if(this.isInstance(encoder)) return encoder.pushInstance(this.index(encoder))
+        if(this.isTemp(encoder)) return encoder.pushTemp(this.index(encoder))
     }
 }
 class ClassNode extends Node {
@@ -226,6 +294,10 @@ class BlockNode extends Node {
 
 class LiteralNode extends Node {
     get isLiteral() { return true };
+    
+    compile(encoder) {
+        return encoder.pushLiteralValue(this)
+    }
 }
 
 class NumberNode extends LiteralNode {
@@ -236,6 +308,13 @@ class NumberNode extends LiteralNode {
     
     toString() {
         return super.toString(this.value.toString())
+    }
+    
+    compile(encoder) {
+        if(Number.isInteger(this.value) && this.value >= 0 && this.value <= 9) {
+            return encoder.pushConstant(this.value)
+        }
+        super.compile(encoder)
     }
 }
 
@@ -265,8 +344,8 @@ class SymbolNode extends LiteralNode {
 class ArrayNode extends LiteralNode {
     constructor(ast, parent) {
         super(ast, parent)
-        assert(ast.value)
-        this.nodes = ast.value.map(x => Node.fromAst(x, this))
+        assert(ast.nodes)
+        this.nodes = ast.nodes.map(x => Node.fromAst(x, this))
     }
     
     get children() { return this.nodes };
@@ -286,33 +365,142 @@ class MethodEncoder {
     constructor(methodNode) {
         this.methodNode = methodNode
         
+        this.arguments = []
         this.temps = []
         this.insts = []
         this.literals = []
-        this.classes = []
-        this.codes = []
-        
-        this.encode()
+        this.bytecode = []
+        this.stackSize = 0
+        this.maxStackSize = 0
     }
     
     encode() {
-        this.readVars()
-        
+        this.readArgs()
+        this.readTemps()
+        this.methodNode.children.forEach(st => {
+            st.compile(this)
+            // drop or return top value on stack (result) for each instructon
+            if(st.type !== 'return') this.popTop()
+        })
+        if(_.last(this.methodNode.children).type !== 'return') {
+            this.selfReturn()
+        }
+        return this
     }
     
-    readVars() {
-        _.concat(this.methodNode.arguments, this.methodNode.temps).forEach(x => {
-             if(_.includes(this.temps, x)) {
+    readArgs() {
+        if(this.methodNode.arguments.length >= 254) {
+            this.syntaxError('Too many arguments', this.methodNode)
+        }
+        
+        this.methodNode.arguments.forEach(x => {
+             if(_.includes(this.arguments, x)) {
+                 this.syntaxError('Argument with name "' + x + '" already defined', this.methodNode, x)
+             }
+             this.arguments.push(x)
+        })
+    }
+    
+    readTemps() {
+        if(this.methodNode.temps.length >= 255) {
+            this.syntaxError('Too many variables', this.methodNode)
+        }
+        
+        this.methodNode.temps.forEach(x => {
+             if(_.includes(this.arguments, x) || _.includes(this.temps, x)) {
                  this.syntaxError('Variable with name "' + x + '" already defined', this.methodNode, x)
              }
              this.temps.push(x)
         })
-        //TODO check limits
-        //TODO add insts
     }
     
     syntaxError(msg, node, info) {
         throw new SyntaxError(msg, node, info)
+    }
+    
+    // opcodes generation
+    opcode(high, low) {
+        if(low >= 16) {
+            this.opcode(0, high)
+            this.writeByte(low)
+        } else {
+            this.writeByte(high * 16 + low)
+        }
+    }
+    writeByte(byte) {
+        assert(byte <= 255 && byte >= 0)
+        this.bytecode.push(byte)
+    }
+    // push
+    pushInstance(idx) {
+        this.opcode(1, idx)
+    }
+    pushArgument(idx) {
+        this.opcode(2, idx)
+    }
+    pushTemp(idx) {
+        this.opcode(3, idx)
+    }
+    pushLiteral(idx) {
+        this.opcode(4, idx)
+    }
+    pushConstant(value) {
+        switch (value) {
+            case 0: return this.opcode(5, 0)
+            case 1: return this.opcode(5, 1)
+            case 2: return this.opcode(5, 2)
+            case 3: return this.opcode(5, 3)
+            case 4: return this.opcode(5, 4)
+            case 5: return this.opcode(5, 5)
+            case 6: return this.opcode(5, 6)
+            case 7: return this.opcode(5, 7)
+            case 8: return this.opcode(5, 8)
+            case 9: return this.opcode(5, 9)
+            case null: return this.opcode(5, 10)
+            case true: return this.opcode(5, 11)
+            case false: return this.opcode(5, 12)
+            default: assert('wrong constant value: ' + value)
+        }
+    }
+    //TODO pushBlock
+    pushSelf() {
+        this.pushArgument(0)
+    }
+    pushNil() {
+        this.pushConstant(null)
+    }
+    pushTrue() {
+        this.pushConstant(true)
+    }
+    pushFalse() {
+        this.pushConstant(false)
+    }
+    pushLiteralValue(value) {
+        // push nodes to literals array, converted to objects on image generating phase
+        this.literals.push(value)
+        this.pushLiteral(this.literals.length - 1)
+    }
+    // assignment
+    assignInstance(idx) {
+        this.opcode(6, idx)
+    }
+    assignTemporary(idx) {
+        this.opcode(7, idx)
+    }
+    // return
+    selfReturn() {
+        this.opcode(15, 1)
+    }
+    stackReturn() {
+        this.opcode(15, 2)
+    }
+    // sends
+    markArguments(size) {
+        this.opcode(8, size)
+    }
+    //pop
+    popTop() {
+        this.opcode(15, 5)
     }
 }
 
@@ -323,7 +511,7 @@ function parse(methodSource) {
 
 function compile(methodSource) {
     var encoder = new MethodEncoder(parse(methodSource))
-    return encoder
+    return encoder.encode()
 }
 
-module.exports = {compile, parse, SyntaxError}
+module.exports = {compile, parse, SyntaxError, MethodEncoder}

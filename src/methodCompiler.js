@@ -159,6 +159,27 @@ class SendNode extends Node {
     }
 }
 
+class PrimitiveNode extends Node {
+    constructor(ast, parent) {
+        super(ast, parent)
+        assert(ast.code)
+        assert(ast.arguments)
+        this.code = ast.code
+        this.arguments = ast.arguments.map(x => Node.fromAst(x))
+    }
+    
+    get children() { return this.arguments };
+    
+    toString() {
+        return super.toString(this.code)
+    }
+    
+    compile(encoder) {
+        this.arguments.forEach(a => a.compile(encoder))
+        encoder.primitive(this.code)
+    }
+}
+
 class ReturnNode extends Node {
     constructor(ast, parent) {
         super(ast, parent)
@@ -272,6 +293,10 @@ class ClassNode extends Node {
     toString() {
         return super.toString(this.name)
     }
+    
+    compile(encoder) {
+        encoder.pushLiteralValue(this)
+    }
 }
 
 class CascadeNode extends Node {
@@ -288,7 +313,31 @@ class CascadeNode extends Node {
         this.messages.forEach(s => s.arguments = s.arguments.map(x => Node.fromAst(x, this)))
     }
     
-    get children() { return this.messages };
+    get children() { return _.concat(this.receiver, this.messages) };
+    
+    compile(encoder) {
+        this.receiver.compile(encoder)
+        
+        var send = (m) => {
+            m.arguments.forEach(a => a.compile(encoder))
+            if(this.receiver.type === 'variable' && this.receiver.name === 'super') {
+                encoder.sendMessageToSuper(m.selector)
+            } else {
+                encoder.send(m.arguments.length, m.selector)
+            }
+        }
+        
+        this.messages.forEach((m, i) => {
+            if(i === this.messages.length - 1) {
+                // last message of cascade is just a simple sending
+                return send(m)
+            }
+            
+            encoder.duplicate() // same receiver each time
+            send(m)
+            encoder.popTop() //discard unused result
+        })
+    }
 }
 
 class BlockNode extends Node {
@@ -490,7 +539,7 @@ class MethodEncoder {
         this.pushConstant(false)
     }
     pushLiteralValue(value) {
-        // push nodes to literals array, converted to objects on image generating phase
+        // push nodes to literals array, will be converted to objects on image generating phase
         this.literals.push(value)
         this.pushLiteral(this.literals.length - 1)
     }
@@ -509,27 +558,39 @@ class MethodEncoder {
         this.opcode(15, 2)
     }
     // sends
-    sendMessage(argSize, selectorIndex) {
+    sendMessageOpcode(argSize, selectorIndex) {
         this.opcode(9, argSize)
         this.writeByte(selectorIndex)
     }
-
+    literalIndexForSelector(selector) {
+        var idx = _.indexOf(this.literals, selector)
+        if(idx === -1) {
+            this.literals.push(selector)
+            return this.literals.length - 1
+        } else {
+            return idx
+        }
+    }
     markArguments(size) {
         this.opcode(8, size)
     }
     send(size, selector) {
         this.markArguments(size + 1) // add receiver to arguments count
-        this.literals.push(selector)
-        this.sendMessage(size, this.literals.length - 1)
+        this.sendMessageOpcode(size, this.literalIndexForSelector(selector))
     }
     sendMessageToSuper(selector) {
         this.opcode(15, 11)
-        this.literals.push(selector)
-        this.writeByte(this.literals.length - 1)
+        this.writeByte(this.literalIndexForSelector(selector))
     }
     //pop
     popTop() {
         this.opcode(15, 5)
+    }
+    duplicate() {
+        this.opcode(15, 4)
+    }
+    primitive(code) {
+        this.opcode(13, code)
     }
 }
 

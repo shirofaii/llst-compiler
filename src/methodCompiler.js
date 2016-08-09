@@ -352,6 +352,10 @@ class BlockNode extends Node {
     
     get isLiteral() { return true };
     get children() { return this.statements };
+    
+    compile(encoder) {
+        
+    }
 }
 
 
@@ -423,60 +427,7 @@ class SyntaxError extends Error {
     }
 }
 
-// represnt encoding ast into compiledMethod
-class MethodEncoder {
-    constructor(methodNode) {
-        this.methodNode = methodNode
-        
-        this.arguments = []
-        this.temps = []
-        this.insts = []
-        this.literals = []
-        this.bytecode = []
-        this.stackSize = 0
-        this.maxStackSize = 0
-    }
-    
-    encode() {
-        this.readArgs()
-        this.readTemps()
-        this.methodNode.children.forEach(st => {
-            st.compile(this)
-            // drop or return top value on stack (result) for each instructon
-            if(st.type !== 'return') this.popTop()
-        })
-        if(_.last(this.methodNode.children).type !== 'return') {
-            this.selfReturn()
-        }
-        return this
-    }
-    
-    readArgs() {
-        if(this.methodNode.arguments.length >= 254) {
-            this.syntaxError('Too many arguments', this.methodNode)
-        }
-        
-        this.methodNode.arguments.forEach(x => {
-             if(_.includes(this.arguments, x)) {
-                 this.syntaxError('Argument with name "' + x + '" already defined', this.methodNode, x)
-             }
-             this.arguments.push(x)
-        })
-    }
-    
-    readTemps() {
-        if(this.methodNode.temps.length >= 255) {
-            this.syntaxError('Too many variables', this.methodNode)
-        }
-        
-        this.methodNode.temps.forEach(x => {
-             if(_.includes(this.arguments, x) || _.includes(this.temps, x)) {
-                 this.syntaxError('Variable with name "' + x + '" already defined', this.methodNode, x)
-             }
-             this.temps.push(x)
-        })
-    }
-    
+class Encoder {
     syntaxError(msg, node, info) {
         throw new SyntaxError(msg, node, info)
     }
@@ -538,11 +489,6 @@ class MethodEncoder {
     pushFalse() {
         this.pushConstant(false)
     }
-    pushLiteralValue(value) {
-        // push nodes to literals array, will be converted to objects on image generating phase
-        this.literals.push(value)
-        this.pushLiteral(this.literals.length - 1)
-    }
     // assignment
     assignInstance(idx) {
         this.opcode(6, idx)
@@ -562,25 +508,8 @@ class MethodEncoder {
         this.opcode(9, argSize)
         this.writeByte(selectorIndex)
     }
-    literalIndexForSelector(selector) {
-        var idx = _.indexOf(this.literals, selector)
-        if(idx === -1) {
-            this.literals.push(selector)
-            return this.literals.length - 1
-        } else {
-            return idx
-        }
-    }
     markArguments(size) {
         this.opcode(8, size)
-    }
-    send(size, selector) {
-        this.markArguments(size + 1) // add receiver to arguments count
-        this.sendMessageOpcode(size, this.literalIndexForSelector(selector))
-    }
-    sendMessageToSuper(selector) {
-        this.opcode(15, 11)
-        this.writeByte(this.literalIndexForSelector(selector))
     }
     //pop
     popTop() {
@@ -592,6 +521,109 @@ class MethodEncoder {
     primitive(code) {
         this.opcode(13, code)
     }
+    
+    // helpers
+    pushLiteralValue(value) {
+        // push nodes to literals array, will be converted to objects on image generating phase
+        this.literals.push(value)
+        this.pushLiteral(this.literals.length - 1)
+    }
+    literalIndexForSelector(selector) {
+        var idx = _.indexOf(this.literals, selector)
+        if(idx === -1) {
+            this.literals.push(selector)
+            return this.literals.length - 1
+        } else {
+            return idx
+        }
+    }
+    send(size, selector) {
+        this.markArguments(size + 1) // add receiver to arguments count
+        this.sendMessageOpcode(size, this.literalIndexForSelector(selector))
+    }
+    sendMessageToSuper(selector) {
+        this.opcode(15, 11)
+        this.writeByte(this.literalIndexForSelector(selector))
+    }
+}
+
+// encoding ast into compiledMethod
+class MethodEncoder extends Encoder {
+    constructor(methodNode) {
+        super()
+        this.methodNode = methodNode
+        
+        this.arguments = []
+        this.temps = []
+        this.insts = []
+        this.literals = []
+        this.bytecode = []
+        this.stackSize = 0
+        this.maxStackSize = 0
+    }
+    
+    encode() {
+        this.readArgs()
+        this.readTemps()
+        this.methodNode.children.forEach(st => {
+            st.compile(this)
+            // drop or return top value on stack (result) for each instructon
+            if(st.type !== 'return') this.popTop()
+        })
+        if(_.last(this.methodNode.children).type !== 'return') {
+            this.selfReturn()
+        }
+        return this
+    }
+    
+    readArgs() {
+        if(this.methodNode.arguments.length >= 254) {
+            this.syntaxError('Too many arguments', this.methodNode)
+        }
+        
+        this.methodNode.arguments.forEach(x => {
+             if(_.includes(this.arguments, x)) {
+                 this.syntaxError('Argument with name "' + x + '" already defined', this.methodNode, x)
+             }
+             this.arguments.push(x)
+        })
+    }
+    
+    readTemps() {
+        if(this.methodNode.temps.length >= 255) {
+            this.syntaxError('Too many variables', this.methodNode)
+        }
+        
+        this.methodNode.temps.forEach(x => {
+             if(_.includes(this.arguments, x) || _.includes(this.temps, x)) {
+                 this.syntaxError('Variable with name "' + x + '" already defined', this.methodNode, x)
+             }
+             this.temps.push(x)
+        })
+    }
+    
+}
+
+class BlockEncoder extends Encoder {
+    constructor(blockNode, parent) {
+        super()
+        this.parent = parent
+        this.blockNode = blockNode
+        
+        // find method encoder
+        var cursor = this
+        while(cursor.parent) { cursor = cursor.parent }
+        this.methodEncoder = cursor
+        
+        this.bytecode = []
+        this.locals = [] // arguments and temps which local for this block and child blocks
+    }
+    
+    get literals() { return this.methodEncoder.literals };
+    get arguments() { return this.methodEncoder.arguments };
+    get insts() { return this.methodEncoder.insts };
+    get temps() { return _.concat(this.parent.temps, this.locals) };
+    
 }
 
 function parse(methodSource) {

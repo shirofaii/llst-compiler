@@ -151,7 +151,49 @@ describe('llst method grammar', function() {
         
         expect(method.bytecode).toEqual(enc.bytecode)
     })
-
+    it('method', function() {
+        var method = compile(`
+            test
+            ^[ ^self ]
+        `)
+        var enc = new MethodEncoder()
+        
+        enc.pushBlock(0, 0, 2)
+            enc.pushSelf()
+            enc.blockReturn()
+        enc.stackReturn()
+        
+        expect(method.bytecode).toEqual(enc.bytecode)
+    })
+    it('method', function() {
+        var method = compile(`
+            test: a1 | a2 |
+            [:b1| | b2 b3 b4 |
+                [:c1| | c2 |
+                    a1+b1+c1
+                ] value: b1
+            ] value: a1.
+        `)
+        var enc = new MethodEncoder()
+        
+        enc.pushBlock(1, 1, 18)
+            enc.pushBlock(1, 5, 10)
+                enc.pushArgument(1)
+                enc.pushTemp(1)
+                enc.send(1, '+')
+                enc.pushTemp(5)
+                enc.send(1, '+')
+                enc.stackReturn()
+            enc.pushTemp(1)
+            enc.send(1, 'value:')
+            enc.stackReturn()
+        enc.pushArgument(1)
+        enc.send(1, 'value:')
+        enc.popTop()
+        enc.selfReturn()
+        
+        expect(method.bytecode).toEqual(enc.bytecode)
+    })
 
 
     it('method error', function() {

@@ -59,8 +59,6 @@ class Node {
         }
     }
     
-    get isLiteral() { return false };
-    
     forEach(aBlock) {
         // call aBlock for each node in tree
         aBlock(this)
@@ -190,11 +188,11 @@ class ReturnNode extends Node {
     
     compile(encoder) {
         if(this.value.type === 'variable' && this.value.name === 'self') {
-            return encoder.selfReturn()
+            return encoder.selfReturnFromMethod()
         }
         this.value.compile(encoder)
         // have an experssion result on top of the stack
-        return encoder.stackReturn()
+        return encoder.stackTopReturnFromMethod()
     }
 }
 
@@ -350,18 +348,19 @@ class BlockNode extends Node {
         this.statements = ast.body.statements.map(stat => Node.fromAst(stat, this))
     }
     
-    get isLiteral() { return true };
     get children() { return this.statements };
     
     compile(encoder) {
+        var blockEncoder = new BlockEncoder(this, encoder)
+        blockEncoder.encode()
         
+        encoder.pushBlock(this.arguments.length, blockEncoder.localsOffset, blockEncoder.bytecode.length)
+        encoder.writeArray(blockEncoder.bytecode)
     }
 }
 
 
 class LiteralNode extends Node {
-    get isLiteral() { return true };
-    
     compile(encoder) {
         return encoder.pushLiteralValue(this)
     }
@@ -445,6 +444,9 @@ class Encoder {
         assert(byte <= 255 && byte >= 0)
         this.bytecode.push(byte)
     }
+    writeArray(array) {
+        this.bytecode = _.concat(this.bytecode, array)
+    }
     // push
     pushInstance(idx) {
         this.opcode(1, idx)
@@ -476,7 +478,13 @@ class Encoder {
             default: assert('wrong constant value: ' + value)
         }
     }
-    //TODO pushBlock
+    pushBlock(argSize, argOffset, bytecodeSize) {
+        this.opcode(12, argSize)
+        if(argSize > 0) {
+            this.writeByte(argOffset)
+        }
+        this.writeByte(bytecodeSize)
+    }
     pushSelf() {
         this.pushArgument(0)
     }
@@ -502,6 +510,9 @@ class Encoder {
     }
     stackReturn() {
         this.opcode(15, 2)
+    }
+    blockReturn() {
+        this.opcode(15, 3)
     }
     // sends
     sendMessageOpcode(argSize, selectorIndex) {
@@ -602,6 +613,13 @@ class MethodEncoder extends Encoder {
         })
     }
     
+    selfReturnFromMethod() {
+        this.selfReturn()
+    }
+    
+    stackTopReturnFromMethod() {
+        this.stackReturn()
+    }
 }
 
 class BlockEncoder extends Encoder {
@@ -616,14 +634,58 @@ class BlockEncoder extends Encoder {
         this.methodEncoder = cursor
         
         this.bytecode = []
-        this.locals = [] // arguments and temps which local for this block and child blocks
+        this.locals = [] // arguments and temps which local for this block
     }
     
     get literals() { return this.methodEncoder.literals };
     get arguments() { return this.methodEncoder.arguments };
     get insts() { return this.methodEncoder.insts };
-    get temps() { return _.concat(this.parent.temps, this.locals) };
     
+    get localsOffset() { return this.parent.temps.length }; // offset for this array in method context
+    
+    readTemps() {
+        this.temps = _.clone(this.parent.temps)
+        this.locals = _.concat(this.blockNode.arguments, this.blockNode.temps)
+        this.locals.forEach(x => {
+             if(_.includes(this.temps, x)) {
+                 this.syntaxError('Variable with name "' + x + '" already defined', this.blockNode, x)
+             }
+             this.temps.push(x)
+        })
+        if(this.temps.length >= 255) {
+            this.syntaxError('Too many variables', this.blockNode)
+        }
+    }
+    
+    encode() {
+        this.readTemps()
+        this.blockNode.children.forEach((st, i) => {
+            var lastInstruction = i === this.blockNode.children.length - 1
+            st.compile(this)
+            // drop or return top value on stack (result) for each instructon
+            // except last one
+            if(st.type !== 'return') {
+                if(lastInstruction) {
+                    this.stackReturn()
+                } else {
+                    this.popTop()
+                }
+            }
+        })
+        if(this.bytecode.length > 256) {
+            this.syntaxError('Block bytecode limited to 256 bytes', this.blockNode, bytecode.length)
+        }
+        return this
+    }
+    
+    selfReturnFromMethod() {
+        this.pushSelf()
+        this.blockReturn()
+    }
+    
+    stackTopReturnFromMethod() {
+        this.blockReturn()
+    }
 }
 
 function parse(methodSource) {

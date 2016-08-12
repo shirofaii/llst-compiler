@@ -141,12 +141,18 @@ class SendNode extends Node {
     }
     
     get children() { return _.concat(this.receiver, this.arguments) };
+    get ifSelectors() { return ['ifTrue:', 'ifFalse:', 'ifTrue:ifFalse:', 'ifFalse:ifTrue:'] }
+    get whileSelectors() { return ['whileTrue:', 'whileFalse:'] }
     
     toString() {
         return super.toString('#' + this.selector)
     }
     
     compile(encoder) {
+        if(_.includes(this.ifSelectors, this.selector) && _.every(this.arguments, a => a.type === 'block')) {
+            return this.optimizeIf(encoder)
+        }
+        
         this.receiver.compile(encoder)
         this.arguments.forEach(a => a.compile(encoder))
         if(this.receiver.type === 'variable' && this.receiver.name === 'super') {
@@ -154,6 +160,51 @@ class SendNode extends Node {
         } else {
             encoder.send(this.arguments.length, this.selector)
         }
+    }
+    
+    optimizeIf(encoder) {
+        this.receiver.compile(encoder)
+        if(this.selector === 'ifTrue:') {
+            // 1 jump behind block (3)
+            // 2 block
+            // 3 ...
+            this.jumpBehindBlockIf(false, encoder, this.arguments[0])
+        }
+        if(this.selector === 'ifFalse:') {
+            this.jumpBehindBlockIf(true, encoder, this.arguments[0])
+        }
+        if(this.selector === 'ifTrue:ifFalse:') {
+            // 1 jump behind block+jump (4)
+            // 2 block
+            // 3 jump behind block (5)
+            // 4 block
+            // 5 ...
+            this.jumpBehindBlockIf(false, encoder, this.arguments[0], 2)
+            this.jumpBehindBlockIf('anyway', encoder, this.arguments[1])
+        }
+        if(this.selector === 'ifFalse:ifTrue:') {
+            this.jumpBehindBlockIf(true, encoder, this.arguments[0], 2)
+            this.jumpBehindBlockIf('anyway', encoder, this.arguments[1])
+        }
+    }
+    
+    jumpBehindBlockIf(branchCondition, encoder, blockNode, offset) {
+        offset = offset || 0
+        var blockEncoder = new BlockEncoder(blockNode, encoder, {inline: true})
+        
+        blockEncoder.encode()
+        
+        // TODO convert offset to absolute position
+        if(branchCondition === true) {
+            encoder.branchIfTrue(blockEncoder.bytecode.length + offset)
+        }
+        if(branchCondition === false) {
+            encoder.branchIfFalse(blockEncoder.bytecode.length + offset)
+        }
+        if(branchCondition === 'anyway') {
+            encoder.branch(blockEncoder.bytecode.length + offset)
+        }
+        encoder.writeArray(blockEncoder.bytecode)
     }
 }
 
@@ -532,7 +583,19 @@ class Encoder {
     primitive(code) {
         this.opcode(13, code)
     }
-    
+    //branches
+    branch(instructionPosition) {
+        this.opcode(15, 6)
+        this.writeByte(instructionPosition)
+    }
+    branchIfTrue(instructionPosition) {
+        this.opcode(15, 7)
+        this.writeByte(instructionPosition)
+    }
+    branchIfFalse(instructionPosition) {
+        this.opcode(15, 8)
+        this.writeByte(instructionPosition)
+    }
     // helpers
     pushLiteralValue(value) {
         // push nodes to literals array, will be converted to objects on image generating phase
@@ -623,10 +686,13 @@ class MethodEncoder extends Encoder {
 }
 
 class BlockEncoder extends Encoder {
-    constructor(blockNode, parent) {
+    constructor(blockNode, parent, options) {
         super()
         this.parent = parent
         this.blockNode = blockNode
+        this.options = options || {
+            inline: false // inline mode: encoding inlined code for branches
+        }
         
         // find method encoder
         var cursor = this
@@ -666,7 +732,7 @@ class BlockEncoder extends Encoder {
             // except last one
             if(st.type !== 'return') {
                 if(lastInstruction) {
-                    this.stackReturn()
+                    if(!this.options.inline) this.stackReturn()
                 } else {
                     this.popTop()
                 }
@@ -679,12 +745,20 @@ class BlockEncoder extends Encoder {
     }
     
     selfReturnFromMethod() {
-        this.pushSelf()
-        this.blockReturn()
+        if(this.options.inline) {
+            this.selfReturn()
+        } else {
+            this.pushSelf()
+            this.blockReturn()
+        }
     }
     
     stackTopReturnFromMethod() {
-        this.blockReturn()
+        if(this.options.inline) {
+            this.stackReturn()
+        } else {
+            this.blockReturn()
+        }
     }
 }
 
@@ -698,4 +772,4 @@ function compile(methodSource) {
     return encoder.encode()
 }
 
-module.exports = {compile, parse, SyntaxError, MethodEncoder}
+module.exports = {compile, parse, SyntaxError, MethodEncoder, BlockEncoder}

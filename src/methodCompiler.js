@@ -5,6 +5,10 @@ const _ = require('lodash')
 
 const psedoVariables = ['self', 'super', 'true', 'false', 'nil']
 
+// special inlined selectors
+const ifSelectors = ['ifTrue:', 'ifFalse:', 'ifTrue:ifFalse:', 'ifFalse:ifTrue:']
+const whileSelectors = ['whileTrue:', 'whileFalse:']
+
 class Node {
     constructor(ast, parent) {
         this.type = ast.type
@@ -141,18 +145,16 @@ class SendNode extends Node {
     }
     
     get children() { return _.concat(this.receiver, this.arguments) };
-    get ifSelectors() { return ['ifTrue:', 'ifFalse:', 'ifTrue:ifFalse:', 'ifFalse:ifTrue:'] }
-    get whileSelectors() { return ['whileTrue:', 'whileFalse:'] }
     
     toString() {
         return super.toString('#' + this.selector)
     }
     
     compile(encoder) {
-        if(_.includes(this.ifSelectors, this.selector) && _.every(this.arguments, a => a.type === 'block')) {
+        if(_.includes(ifSelectors, this.selector) && _.every(this.arguments, a => a.type === 'block')) {
             return this.optimizeIf(encoder)
         }
-        if(_.includes(this.whileSelectors, this.selector) && this.arguments[0].type === 'block' && this.receiver.type === 'block') {
+        if(_.includes(whileSelectors, this.selector) && this.arguments[0].type === 'block' && this.receiver.type === 'block') {
             return this.optimizeWhile(encoder)
         }
         
@@ -170,7 +172,7 @@ class SendNode extends Node {
         // 2 jump behind block (5)
         // 3 block
         // 4 jump to condition (1)
-        // 5 ...
+        // 5 push nil
 
         const conditionBlockEncoder = this.receiver.compileInline(encoder)
         const condition = this.selector === 'whileTrue:'

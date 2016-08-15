@@ -165,13 +165,19 @@ class SendNode extends Node {
     optimizeIf(encoder) {
         this.receiver.compile(encoder)
         if(this.selector === 'ifTrue:') {
-            // 1 jump behind block (3)
+            // 1 jump behind block+jump (4)
             // 2 block
-            // 3 ...
-            this.jumpBehindBlockIf(false, encoder, this.arguments[0])
+            // 3 jump behind block (5)
+            // 4 push nil
+            // 5 ...
+            this.jumpBehindBlockIf(false, encoder, this.arguments[0], 2)
+            encoder.branch(1)
+            encoder.pushConstant(null)
         }
         if(this.selector === 'ifFalse:') {
-            this.jumpBehindBlockIf(true, encoder, this.arguments[0])
+            this.jumpBehindBlockIf(true, encoder, this.arguments[0], 2)
+            encoder.branch(1)
+            encoder.pushConstant(null)
         }
         if(this.selector === 'ifTrue:ifFalse:') {
             // 1 jump behind block+jump (4)

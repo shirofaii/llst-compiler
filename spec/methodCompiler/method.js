@@ -212,6 +212,7 @@ describe('llst method grammar', function() {
         enc.popTop()
         enc.selfReturn()
         
+        enc.fixOffsets()
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -232,6 +233,7 @@ describe('llst method grammar', function() {
         enc.popTop()
         enc.selfReturn()
         
+        enc.fixOffsets()
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -252,6 +254,25 @@ describe('llst method grammar', function() {
             enc.pushConstant(null)          // size 1 byte
         enc.stackReturn()
         
+        enc.fixOffsets()
+        expect(method.bytecode).toEqual(enc.bytecode)
+    })
+    it('method', function() {
+        var method = compile(`
+            test
+            ^[false] whileTrue: [true]
+        `)
+        var enc = new MethodEncoder()
+        
+        enc.pushConstant(false)             // size 1 byte
+        enc.branchIfFalse(4)                // size 2 bytes
+            enc.pushConstant(true)          // size 1 byte
+            enc.popTop()                    // size 1 byte
+        enc.branch(-7)                      // size 2 bytes
+            enc.pushConstant(null)          // size 1 byte
+        enc.stackReturn()
+        
+        enc.fixOffsets()
         expect(method.bytecode).toEqual(enc.bytecode)
     })
 

@@ -152,6 +152,9 @@ class SendNode extends Node {
         if(_.includes(this.ifSelectors, this.selector) && _.every(this.arguments, a => a.type === 'block')) {
             return this.optimizeIf(encoder)
         }
+        if(_.includes(this.whileSelectors, this.selector) && this.arguments[0].type === 'block' && this.receiver.type === 'block') {
+            return this.optimizeWhile(encoder)
+        }
         
         this.receiver.compile(encoder)
         this.arguments.forEach(a => a.compile(encoder))
@@ -160,6 +163,28 @@ class SendNode extends Node {
         } else {
             encoder.send(this.arguments.length, this.selector)
         }
+    }
+    
+    optimizeWhile(encoder) {
+        // 1 condition
+        // 2 jump behind block (5)
+        // 3 block
+        // 4 jump to condition (1)
+        // 5 ...
+
+        const conditionBlockEncoder = this.receiver.compileInline(encoder)
+        const condition = this.selector === 'whileTrue:'
+        const bodyBlockEncoder = this.jumpBehindBlockIf(!condition, encoder, this.arguments[0], 3)
+        encoder.popTop() // discard last instruction result before jump to condition block
+        
+        // condition block size
+        // jump size
+        // body size
+        // popTop size
+        // jump size
+        encoder.branch(-(2 + 1 + bodyBlockEncoder.bytecode.length + 2 + conditionBlockEncoder.bytecode.length))
+        
+        encoder.pushConstant(null)
     }
     
     optimizeIf(encoder) {
@@ -200,7 +225,6 @@ class SendNode extends Node {
         
         blockEncoder.encode()
         
-        // TODO convert offset to absolute position
         if(branchCondition === true) {
             encoder.branchIfTrue(blockEncoder.bytecode.length + offset)
         }
@@ -211,6 +235,7 @@ class SendNode extends Node {
             encoder.branch(blockEncoder.bytecode.length + offset)
         }
         encoder.writeArray(blockEncoder.bytecode)
+        return blockEncoder
     }
 }
 
@@ -414,6 +439,13 @@ class BlockNode extends Node {
         encoder.pushBlock(this.arguments.length, blockEncoder.localsOffset, blockEncoder.bytecode.length)
         encoder.writeArray(blockEncoder.bytecode)
     }
+    
+    compileInline(encoder) {
+        var blockEncoder = new BlockEncoder(this, encoder, {inline: true})
+        blockEncoder.encode()
+        encoder.writeArray(blockEncoder.bytecode)
+        return blockEncoder
+    }
 }
 
 
@@ -500,6 +532,9 @@ class Encoder {
     writeByte(byte) {
         assert(byte <= 255 && byte >= 0)
         this.bytecode.push(byte)
+    }
+    writeBytecodeOffset(offset) {
+        this.bytecode.push({offset})
     }
     writeArray(array) {
         this.bytecode = _.concat(this.bytecode, array)
@@ -592,15 +627,15 @@ class Encoder {
     //branches
     branch(instructionPosition) {
         this.opcode(15, 6)
-        this.writeByte(instructionPosition)
+        this.writeBytecodeOffset(instructionPosition)
     }
     branchIfTrue(instructionPosition) {
         this.opcode(15, 7)
-        this.writeByte(instructionPosition)
+        this.writeBytecodeOffset(instructionPosition)
     }
     branchIfFalse(instructionPosition) {
         this.opcode(15, 8)
-        this.writeByte(instructionPosition)
+        this.writeBytecodeOffset(instructionPosition)
     }
     // helpers
     pushLiteralValue(value) {
@@ -653,6 +688,7 @@ class MethodEncoder extends Encoder {
         if(_.last(this.methodNode.children).type !== 'return') {
             this.selfReturn()
         }
+        this.fixOffsets()
         return this
     }
     
@@ -688,6 +724,19 @@ class MethodEncoder extends Encoder {
     
     stackTopReturnFromMethod() {
         this.stackReturn()
+    }
+    
+    // convert bytecode jump offsets to absolute values
+    fixOffsets() {
+        for(var i = 0; i < this.bytecode.length; i++) {
+            if(this.bytecode[i].offset) {
+                var absPos = i + this.bytecode[i].offset + 1
+                if(absPos > 255 || absPos < 0) {
+                    this.syntaxError('Too big method', this, this.bytecode.length)
+                }
+                this.bytecode[i] = absPos
+            }
+        }
     }
 }
 

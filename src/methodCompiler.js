@@ -670,6 +670,7 @@ class MethodEncoder extends Encoder {
         super()
         this.methodNode = methodNode
         
+        this.name = methodNode ? methodNode.name : ''
         this.arguments = []
         this.temps = []
         this.insts = []

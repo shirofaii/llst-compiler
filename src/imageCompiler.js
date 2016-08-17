@@ -35,13 +35,22 @@ class Class {
         }
         
         if(!this.metaClass) {
-            console.log(node)
             encoder.syntaxError('Cannot find class ' + node.instanceOf, node, node.instanceOf)
         }
     }
     
-    addSubclass(klass) {
-        
+    hierarchy() {
+        var cursor = this
+        var result = []
+        while(cursor) {
+            result.unshift(cursor)
+            cursor = cursor.parentClass
+        }
+        return result
+    }
+    
+    allVariables() {
+        return _.flatten(this.hierarchy().map(x => x.variables))
     }
 }
 
@@ -95,7 +104,7 @@ class ImageEncoder {
         }
         
         // have possible cycled link there, so we write actual class later
-        // now just mark it with name
+        // now just mark it with a name
         found = _.find(this.nodes, x => x.name === name)
         if(found) {
             return name
@@ -108,9 +117,9 @@ class ImageEncoder {
             if(x.type === 'method') {
                 var klass = this.classes[x.className]
                 if(!klass) {
-                    this.syntaxError('Unknown class ' + x.className, x, x.className)
+                    this.syntaxError('Unknown class "' + x.className + '"', x, x.className)
                 }
-                var encodedMethod = methodCompiler.compile(x.source)
+                var encodedMethod = methodCompiler.compile(x.source, klass)
                 klass.methods[encodedMethod.name] = encodedMethod
             }
         })

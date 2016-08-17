@@ -1,5 +1,6 @@
 const compile = require('../../src/imageCompiler.js').compile
 const ImageEncoder = require('../../src/imageCompiler.js').ImageEncoder
+const MethodEncoder = require('../../src/methodCompiler.js').MethodEncoder
 const _ = require('lodash')
 
 
@@ -75,5 +76,27 @@ in: object at: index
         expect(encoder.classes['MetaObject'].methods['in:at:put:'].bytecode).toEqual([35, 33, 34, 213, 245, 241])
         expect(encoder.classes['Object'].methods['in:at:'].bytecode).toEqual([33, 34, 13, 24, 245, 32, 129, 144, 0, 245, 241])
     })
+
+    it('class variables', function() {
+        var encoder = compile(`
+RAWCLASS Object MetaObject nil
+RAWCLASS Class      MetaClass Object      name parentClass methods size variables children
+RAWCLASS MetaObject Class     Class
+RAWCLASS MetaClass  Class     MetaObject
+CLASS Parent Object a b c
+CLASS Child Parent d e f
+METHOD Child
+e
+	^e
+!
+        `)
+        
+        var enc = new MethodEncoder()
+        enc.pushInstance(4)
+        enc.stackReturn()
+        
+        expect(encoder.classes['Child'].methods['e'].bytecode).toEqual(enc.bytecode)
+    })
+
 
 });

@@ -666,14 +666,17 @@ class Encoder {
 
 // encoding ast into compiledMethod
 class MethodEncoder extends Encoder {
-    constructor(methodNode) {
+    constructor(methodNode, klass) {
         super()
+        
+        // both parameters are optional
         this.methodNode = methodNode
+        this.klass = klass
         
         this.name = methodNode ? methodNode.name : ''
         this.arguments = []
         this.temps = []
-        this.insts = []
+        this.insts = this.klassVariables()
         this.literals = []
         this.bytecode = []
         this.stackSize = 0
@@ -740,6 +743,12 @@ class MethodEncoder extends Encoder {
                 this.bytecode[i] = absPos
             }
         }
+    }
+    
+    klassVariables() {
+        if(!this.klass) return []
+        
+        return this.klass.allVariables()
     }
 }
 
@@ -825,8 +834,9 @@ function parse(methodSource) {
     return new MethodNode(root, methodSource)
 }
 
-function compile(methodSource) {
-    var encoder = new MethodEncoder(parse(methodSource))
+// klass may be null if method would be compiled outside of a class context
+function compile(methodSource, klass) {
+    var encoder = new MethodEncoder(parse(methodSource), klass)
     return encoder.encode()
 }
 

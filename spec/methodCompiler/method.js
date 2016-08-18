@@ -41,6 +41,7 @@ describe('llst method grammar', function() {
         enc.stackReturn()
         
         expect(method.bytecode).toEqual(enc.bytecode)
+        expect(method.maxStackSize).toEqual(1)
     })
     it('method', function() {
         var method = compile(`
@@ -146,7 +147,7 @@ describe('llst method grammar', function() {
         var enc = new MethodEncoder()
         
         enc.pushLiteralValue('a')
-        enc.primitive(1)
+        enc.primitive(1, ['a'])
         enc.stackReturn()
         
         expect(method.bytecode).toEqual(enc.bytecode)

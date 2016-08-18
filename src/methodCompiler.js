@@ -168,24 +168,26 @@ class SendNode extends Node {
     }
     
     optimizeWhile(encoder) {
-        // 1 condition
-        // 2 jump behind block (5)
-        // 3 block
+        const conditionBlock = this.blockFromNode(encoder, this.receiver)
+        const bodyBlock = this.blockFromNode(encoder, this.arguments[0])
+        bodyBlock.popTop() // discard last instruction result before jump to condition block
+        
+        const condition = this.selector === 'whileTrue:'
+        
+        // 1 condition block
+        // 2 jump behind body block + jump (5)
+        // 3 body block
         // 4 jump to condition (1)
         // 5 push nil
-
-        const conditionBlockEncoder = this.receiver.compileInline(encoder)
-        const condition = this.selector === 'whileTrue:'
-        const bodyBlockEncoder = this.jumpBehindBlockIf(!condition, encoder, this.arguments[0], 3)
-        encoder.popTop() // discard last instruction result before jump to condition block
+        encoder.writeArray(conditionBlock.bytecode)
+        this.jump(encoder, bodyBlock.bytecode.length + 2, !condition)
+        encoder.writeArray(bodyBlock.bytecode)
         
         // condition block size
         // jump size
         // body size
-        // popTop size
         // jump size
-        encoder.branch(-(2 + 1 + bodyBlockEncoder.bytecode.length + 2 + conditionBlockEncoder.bytecode.length))
-        
+        this.jump(encoder, -(2 + bodyBlock.bytecode.length + 2 + conditionBlock.bytecode.length))
         encoder.pushConstant(null)
     }
     
@@ -197,47 +199,60 @@ class SendNode extends Node {
             // 3 jump behind block (5)
             // 4 push nil
             // 5 ...
-            this.jumpBehindBlockIf(false, encoder, this.arguments[0], 2)
-            encoder.branch(1)
+            var block = this.blockFromNode(encoder, this.arguments[0])
+            this.jump(encoder, block.bytecode.length + 2, false)
+            encoder.writeArray(block.bytecode)
+            this.jump(encoder, 1)
             encoder.pushConstant(null)
         }
         if(this.selector === 'ifFalse:') {
-            this.jumpBehindBlockIf(true, encoder, this.arguments[0], 2)
-            encoder.branch(1)
+            var block = this.blockFromNode(encoder, this.arguments[0])
+            this.jump(encoder, block.bytecode.length + 2, true)
+            encoder.writeArray(block.bytecode)
+            this.jump(encoder, 1)
             encoder.pushConstant(null)
         }
         if(this.selector === 'ifTrue:ifFalse:') {
-            // 1 jump behind block+jump (4)
-            // 2 block
-            // 3 jump behind block (5)
-            // 4 block
+            var blockA = this.blockFromNode(encoder, this.arguments[0])
+            var blockB = this.blockFromNode(encoder, this.arguments[1])
+            // 1 jump behind blockA+jump (4)
+            // 2 blockA
+            // 3 jump behind blockB (5)
+            // 4 blockB
             // 5 ...
-            this.jumpBehindBlockIf(false, encoder, this.arguments[0], 2)
-            this.jumpBehindBlockIf('anyway', encoder, this.arguments[1])
+            this.jump(encoder, blockA.bytecode.length + 2, false)
+            encoder.writeArray(blockA.bytecode)
+            this.jump(encoder, blockB.bytecode.length)
+            encoder.writeArray(blockB.bytecode)
         }
         if(this.selector === 'ifFalse:ifTrue:') {
-            this.jumpBehindBlockIf(true, encoder, this.arguments[0], 2)
-            this.jumpBehindBlockIf('anyway', encoder, this.arguments[1])
+            var blockA = this.blockFromNode(encoder, this.arguments[0])
+            var blockB = this.blockFromNode(encoder, this.arguments[1])
+            this.jump(encoder, blockA.bytecode.length + 2, true)
+            encoder.writeArray(blockA.bytecode)
+            this.jump(encoder, blockB.bytecode.length)
+            encoder.writeArray(blockB.bytecode)
         }
     }
     
-    jumpBehindBlockIf(branchCondition, encoder, blockNode, offset) {
-        offset = offset || 0
-        var blockEncoder = new BlockEncoder(blockNode, encoder, {inline: true})
-        
+    blockFromNode(encoder, node) {
+        var blockEncoder = new BlockEncoder(node, encoder, {inline: true})
         blockEncoder.encode()
+        return blockEncoder
+    }
+    
+    jump(encoder, offset, branchCondition) {
+        offset = offset || 0
         
         if(branchCondition === true) {
-            encoder.branchIfTrue(blockEncoder.bytecode.length + offset)
+            encoder.branchIfTrue(offset)
         }
         if(branchCondition === false) {
-            encoder.branchIfFalse(blockEncoder.bytecode.length + offset)
+            encoder.branchIfFalse(offset)
         }
-        if(branchCondition === 'anyway') {
-            encoder.branch(blockEncoder.bytecode.length + offset)
+        if(branchCondition === undefined) {
+            encoder.branch(offset)
         }
-        encoder.writeArray(blockEncoder.bytecode)
-        return blockEncoder
     }
 }
 
@@ -258,7 +273,7 @@ class PrimitiveNode extends Node {
     
     compile(encoder) {
         this.arguments.forEach(a => a.compile(encoder))
-        encoder.primitive(this.code)
+        encoder.primitive(this.code, this.arguments)
     }
 }
 
@@ -445,6 +460,7 @@ class BlockNode extends Node {
     compileInline(encoder) {
         var blockEncoder = new BlockEncoder(this, encoder, {inline: true})
         blockEncoder.encode()
+        encoder.maxStackSize = Math.max(encoder.maxStackSize, blockEncoder.maxStackSize)
         encoder.writeArray(blockEncoder.bytecode)
         return blockEncoder
     }
@@ -518,6 +534,22 @@ class SyntaxError extends Error {
 }
 
 class Encoder {
+    constructor() {
+        this.stackSize = 0
+        this.maxStackSize = 0
+    }
+    
+    // calculate max stack size, called for each push-something instruction
+    stackPush(numValues) {
+        this.stackSize += numValues
+        this.maxStackSize = Math.max(this.maxStackSize, this.stackSize)
+    }
+    // calculate max stack size, called for each instruction which pop values from a stack
+    stackPop(numValues) {
+        this.stackSize -= numValues
+        assert(this.stackSize >= 0)
+    }
+    
     syntaxError(msg, node, info) {
         throw new SyntaxError(msg, node, info)
     }
@@ -543,18 +575,23 @@ class Encoder {
     }
     // push
     pushInstance(idx) {
+        this.stackPush(1)
         this.opcode(1, idx)
     }
     pushArgument(idx) {
+        this.stackPush(1)
         this.opcode(2, idx)
     }
     pushTemp(idx) {
+        this.stackPush(1)
         this.opcode(3, idx)
     }
     pushLiteral(idx) {
+        this.stackPush(1)
         this.opcode(4, idx)
     }
     pushConstant(value) {
+        this.stackPush(1)
         switch (value) {
             case 0: return this.opcode(5, 0)
             case 1: return this.opcode(5, 1)
@@ -573,6 +610,7 @@ class Encoder {
         }
     }
     pushBlock(argSize, argOffset, bytecodeSize) {
+        this.stackPush(1)
         this.opcode(12, argSize)
         if(argSize > 0) {
             this.writeByte(argOffset)
@@ -610,6 +648,8 @@ class Encoder {
     }
     // sends
     sendMessageOpcode(argSize, selectorIndex) {
+        this.stackPop(argSize + 1)
+        this.stackPush(1)
         this.opcode(9, argSize)
         this.writeByte(selectorIndex)
     }
@@ -618,12 +658,16 @@ class Encoder {
     }
     //pop
     popTop() {
+        this.stackPop(1)
         this.opcode(15, 5)
     }
     duplicate() {
+        this.stackPush(1)
         this.opcode(15, 4)
     }
-    primitive(code) {
+    primitive(code, args) {
+        this.stackPop(args.length)
+        this.stackPush(1)
         this.opcode(13, code)
     }
     //branches
@@ -679,8 +723,6 @@ class MethodEncoder extends Encoder {
         this.insts = this.klassVariables()
         this.literals = []
         this.bytecode = []
-        this.stackSize = 0
-        this.maxStackSize = 0
     }
     
     encode() {
@@ -699,7 +741,7 @@ class MethodEncoder extends Encoder {
     }
     
     readArgs() {
-        if(this.methodNode.arguments.length >= 254) {
+        if(this.methodNode.arguments.length > 255) {
             this.syntaxError('Too many arguments', this.methodNode)
         }
         
@@ -712,7 +754,7 @@ class MethodEncoder extends Encoder {
     }
     
     readTemps() {
-        if(this.methodNode.temps.length >= 255) {
+        if(this.methodNode.temps.length > 256) {
             this.syntaxError('Too many variables', this.methodNode)
         }
         
@@ -735,7 +777,8 @@ class MethodEncoder extends Encoder {
     // convert bytecode jump offsets to absolute values
     fixOffsets() {
         for(var i = 0; i < this.bytecode.length; i++) {
-            if(this.bytecode[i].offset) {
+            if(typeof this.bytecode[i].offset === 'number') {
+                assert(this.bytecode[i].offset !== 0)
                 var absPos = i + this.bytecode[i].offset + 1
                 if(absPos > 255 || absPos < 0) {
                     this.syntaxError('Too big method', this, this.bytecode.length)
@@ -768,6 +811,11 @@ class BlockEncoder extends Encoder {
         
         this.bytecode = []
         this.locals = [] // arguments and temps which local for this block
+        
+        if(this.options.inline) {
+            this.stackSize = parent.stackSize
+            this.maxStackSize = parent.maxStackSize
+        }
     }
     
     get literals() { return this.methodEncoder.literals };

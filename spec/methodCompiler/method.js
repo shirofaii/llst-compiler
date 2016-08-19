@@ -11,6 +11,7 @@ describe('llst method grammar', function() {
         `)
         expect(method.temps).toEqual(['x'])
         expect(method.literals).toEqual([])
+        expect(method.maxStackSize).toEqual(1)
         expect(method.bytecode).toEqual([82, 112, 245, 241])
     })
 
@@ -24,6 +25,7 @@ describe('llst method grammar', function() {
         enc.pushConstant(null)
         enc.stackReturn()
         
+        expect(method.maxStackSize).toEqual(1)
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -60,6 +62,7 @@ describe('llst method grammar', function() {
         enc.send(0, 'factorial')
         enc.stackReturn()
         
+        expect(method.maxStackSize).toEqual(2)
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -74,6 +77,7 @@ describe('llst method grammar', function() {
         enc.send(1, 'to:')
         enc.stackReturn()
         
+        expect(method.maxStackSize).toEqual(2)
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -88,6 +92,7 @@ describe('llst method grammar', function() {
         enc.send(0, 'not')
         enc.stackReturn()
         
+        expect(method.maxStackSize).toEqual(1)
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -105,6 +110,7 @@ describe('llst method grammar', function() {
         enc.send(0, 'init')
         enc.stackReturn()
         
+        expect(method.maxStackSize).toEqual(1)
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -117,6 +123,7 @@ describe('llst method grammar', function() {
         enc.pushSelf()
         enc.stackReturn()
         
+        expect(method.maxStackSize).toEqual(1)
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -137,6 +144,7 @@ describe('llst method grammar', function() {
         enc.popTop()
         enc.selfReturn()
         
+        expect(method.maxStackSize).toEqual(2)
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -150,6 +158,7 @@ describe('llst method grammar', function() {
         enc.primitive(1, ['a'])
         enc.stackReturn()
         
+        expect(method.maxStackSize).toEqual(1)
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -164,6 +173,7 @@ describe('llst method grammar', function() {
             enc.blockReturn()
         enc.stackReturn()
         
+        expect(method.maxStackSize).toEqual(1)
         expect(method.bytecode).toEqual(enc.bytecode)
     })
     it('method', function() {
@@ -276,6 +286,21 @@ describe('llst method grammar', function() {
         enc.fixOffsets()
         expect(method.bytecode).toEqual(enc.bytecode)
     })
+    it('method stack size', function() {
+        var method = compile(`
+            test
+            ^[ 1 to: 10 by: 2 ]
+        `)
+        expect(method.maxStackSize).toEqual(3)
+    })
+    it('method stack size', function() {
+        var method = compile(`
+            test
+            [true] whileTrue: [ 1 to: 10 by: 2 ]
+        `)
+        expect(method.maxStackSize).toEqual(3)
+    })
+
 
     it('method error', function() {
         var method = `

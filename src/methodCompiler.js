@@ -180,58 +180,61 @@ class SendNode extends Node {
         // 4 jump to condition (1)
         // 5 push nil
         encoder.writeArray(conditionBlock.bytecode)
+        encoder.stackPush(1)
         this.jump(encoder, bodyBlock.bytecode.length + 2, !condition)
         encoder.writeArray(bodyBlock.bytecode)
-        
         // condition block size
         // jump size
         // body size
         // jump size
         this.jump(encoder, -(2 + bodyBlock.bytecode.length + 2 + conditionBlock.bytecode.length))
         encoder.pushConstant(null)
+        
+        encoder.maxStackSize = Math.max(encoder.maxStackSize, conditionBlock.maxStackSize)
+        encoder.maxStackSize = Math.max(encoder.maxStackSize, bodyBlock.maxStackSize)
     }
     
     optimizeIf(encoder) {
         this.receiver.compile(encoder)
-        if(this.selector === 'ifTrue:') {
-            // 1 jump behind block+jump (4)
-            // 2 block
-            // 3 jump behind block (5)
-            // 4 push nil
-            // 5 ...
-            var block = this.blockFromNode(encoder, this.arguments[0])
-            this.jump(encoder, block.bytecode.length + 2, false)
-            encoder.writeArray(block.bytecode)
-            this.jump(encoder, 1)
-            encoder.pushConstant(null)
+        const conditions = {
+            'ifTrue:': false,
+            'ifFalse:': true,
+            'ifTrue:ifFalse:': false,
+            'ifFalse:ifTrue:': true
         }
-        if(this.selector === 'ifFalse:') {
-            var block = this.blockFromNode(encoder, this.arguments[0])
-            this.jump(encoder, block.bytecode.length + 2, true)
-            encoder.writeArray(block.bytecode)
-            this.jump(encoder, 1)
-            encoder.pushConstant(null)
-        }
-        if(this.selector === 'ifTrue:ifFalse:') {
-            var blockA = this.blockFromNode(encoder, this.arguments[0])
-            var blockB = this.blockFromNode(encoder, this.arguments[1])
-            // 1 jump behind blockA+jump (4)
-            // 2 blockA
-            // 3 jump behind blockB (5)
-            // 4 blockB
-            // 5 ...
-            this.jump(encoder, blockA.bytecode.length + 2, false)
-            encoder.writeArray(blockA.bytecode)
-            this.jump(encoder, blockB.bytecode.length)
-            encoder.writeArray(blockB.bytecode)
-        }
-        if(this.selector === 'ifFalse:ifTrue:') {
-            var blockA = this.blockFromNode(encoder, this.arguments[0])
-            var blockB = this.blockFromNode(encoder, this.arguments[1])
-            this.jump(encoder, blockA.bytecode.length + 2, true)
-            encoder.writeArray(blockA.bytecode)
-            this.jump(encoder, blockB.bytecode.length)
-            encoder.writeArray(blockB.bytecode)
+        switch(this.selector) {
+            case 'ifFalse:':
+            case 'ifTrue:':
+                // 1 jump behind block+jump (4)
+                // 2 block
+                // 3 jump behind block (5)
+                // 4 push nil
+                // 5 ...
+                var block = this.blockFromNode(encoder, this.arguments[0])
+                this.jump(encoder, block.bytecode.length + 2, conditions[this.selector])
+                encoder.writeArray(block.bytecode)
+                this.jump(encoder, 1)
+                encoder.pushConstant(null)
+                encoder.maxStackSize = Math.max(encoder.maxStackSize, block.maxStackSize)
+            break;
+            case 'ifTrue:ifFalse:':
+            case 'ifFalse:ifTrue:':
+                var blockA = this.blockFromNode(encoder, this.arguments[0])
+                var blockB = this.blockFromNode(encoder, this.arguments[1])
+                // 1 jump behind blockA+jump (4)
+                // 2 blockA
+                // 3 jump behind blockB (5)
+                // 4 blockB
+                // 5 ...
+                this.jump(encoder, blockA.bytecode.length + 2, conditions[this.selector])
+                encoder.writeArray(blockA.bytecode)
+                this.jump(encoder, blockB.bytecode.length)
+                encoder.writeArray(blockB.bytecode)
+                encoder.stackPush(1) // count returned value
+                
+                encoder.maxStackSize = Math.max(encoder.maxStackSize, blockA.maxStackSize)
+                encoder.maxStackSize = Math.max(encoder.maxStackSize, blockB.maxStackSize)
+            break;
         }
     }
     
@@ -451,18 +454,12 @@ class BlockNode extends Node {
     
     compile(encoder) {
         var blockEncoder = new BlockEncoder(this, encoder)
+        
         blockEncoder.encode()
         
+        encoder.maxStackSize = Math.max(encoder.maxStackSize, blockEncoder.maxStackSize)
         encoder.pushBlock(this.arguments.length, blockEncoder.localsOffset, blockEncoder.bytecode.length)
         encoder.writeArray(blockEncoder.bytecode)
-    }
-    
-    compileInline(encoder) {
-        var blockEncoder = new BlockEncoder(this, encoder, {inline: true})
-        blockEncoder.encode()
-        encoder.maxStackSize = Math.max(encoder.maxStackSize, blockEncoder.maxStackSize)
-        encoder.writeArray(blockEncoder.bytecode)
-        return blockEncoder
     }
 }
 
@@ -676,10 +673,12 @@ class Encoder {
         this.writeBytecodeOffset(instructionPosition)
     }
     branchIfTrue(instructionPosition) {
+        this.stackPop(1)
         this.opcode(15, 7)
         this.writeBytecodeOffset(instructionPosition)
     }
     branchIfFalse(instructionPosition) {
+        this.stackPop(1)
         this.opcode(15, 8)
         this.writeBytecodeOffset(instructionPosition)
     }
@@ -812,10 +811,8 @@ class BlockEncoder extends Encoder {
         this.bytecode = []
         this.locals = [] // arguments and temps which local for this block
         
-        if(this.options.inline) {
-            this.stackSize = parent.stackSize
-            this.maxStackSize = parent.maxStackSize
-        }
+        this.stackSize = parent.stackSize
+        this.maxStackSize = parent.maxStackSize
     }
     
     get literals() { return this.methodEncoder.literals };
@@ -887,5 +884,10 @@ function compile(methodSource, klass) {
     var encoder = new MethodEncoder(parse(methodSource), klass)
     return encoder.encode()
 }
+
+var method = compile(`
+    test
+    [true] whileTrue: [ 1 to: 10 by: 2 ]
+`)
 
 module.exports = {compile, parse, SyntaxError, MethodEncoder, BlockEncoder}

@@ -300,7 +300,82 @@ describe('llst method grammar', function() {
         `)
         expect(method.maxStackSize).toEqual(3)
     })
-
+    it('big method', function() {
+        var method = compile(`
+            run: rounds | mock array ordered indices list tree |
+            mock <- Mock new.
+        
+            self run: [ 2 + 3 ] rounds: rounds text: 'Literal addition'.
+            self run: [ 2 + (mock argReturn: 3) ] rounds: rounds text: 'SmallInt + object'.
+            self run: [ (mock argReturn: 3) + 2] rounds: rounds text: 'object + SmallInt'.
+        
+            self run: [ 1 to: rounds do: [ :x | 2 + 3 ] ] rounds: 1 text: 'Literal addition in a loop'.
+            self run: [ 1 to: rounds do: [ :x | 2 + (mock argReturn: 3) ] ] rounds: 1 text: 'SmallInt + object in a loop'.
+            self run: [ 1 to: rounds do: [ :x | (mock argReturn: 3) + 2 ] ] rounds: 1 text: 'object + SmallInt in a loop'.
+        
+            self run: [ mock selfReturn ] rounds: rounds text: 'Self return'.
+            self run: [ mock stackReturn ] rounds: rounds text: 'Stack return'.
+            self run: [ mock argReturn: nil ] rounds: rounds text: 'Arg return'.
+            self run: [ mock literalReturn ] rounds: rounds text: 'Literal return'.
+            self run: [ mock fieldReturn ] rounds: rounds text: 'Field return'.
+        
+            self run: [ mock setField: nil ] rounds: rounds text: 'Set field'.
+            self run: [ mock setTemporary: nil ] rounds: rounds text: 'Set temporary'.
+        
+            self run: [ 'Hello world' size ] rounds: rounds text: 'Literal receiver'.
+        
+            self run: [ mock selfSend ] rounds: rounds text: 'Self dispatch'.
+        
+            self run: [ mock invokeBlock: [nil] ] rounds: rounds text: 'Block invoke'.
+            self run: [ mock blockReturn ] rounds: rounds text: 'Block return'.
+        
+            self run: [ mock selfReturn selfReturn selfReturn selfReturn selfReturn ] rounds: rounds text: 'Chain dispatch'.
+            self run: [ mock selfReturn; selfReturn; selfReturn; selfReturn; selfReturn ] rounds: rounds text: 'Cascade dispatch'.
+        
+            self run: [ mock invokePrimitive ] rounds: rounds text: 'Primitive invocation'.
+            self run: [ mock failPrimitive ] rounds: rounds text: 'Failed primitive invocation'.
+        
+            self run: [ mock invokeUnknownSelector ] rounds: rounds text: 'Dispatch of #doesNotUnderstand'.
+        
+            array <- Array new: 10000.
+            indices <- Array new: 10000.
+            1 to: array size do: [ :x | indices at: x put: (array size atRandom) ].
+        
+            self run: [ 1 to: array size do: [ :x | array at: x ] ] rounds: rounds / (array size) text: 'Array, linear read'.
+            self run: [ 1 to: array size do: [ :x | array at: (indices at: x) ] ] rounds: rounds / (array size) text: 'Array, random read'.
+        
+            array <- Array new: 2.
+            self softRun: [ array insert: nil at: array size / 2 ] rounds: rounds text: 'Array, middle insert'.
+        
+            array <- Array new: 2.
+            self jitRun: [ array insert: nil at: array size / 2 ] rounds: rounds text: 'Array, middle insert'.
+        
+            ordered <- OrderedArray new: 0.
+            self softRun: [ 1 to: (indices size) do: [ :x | ordered add: (indices at: x) ] ] rounds: rounds / (indices size) text: 'OrderedArray, creation'.
+            self softRun: [ 1 to: (indices size) do: [ :x | ordered includes: (indices at: x) ] ] rounds: rounds / (indices size) text: 'OrderedArray, selection'.
+        
+            ordered <- OrderedArray new: 0.
+            self jitRun: [ 1 to: (indices size) do: [ :x | ordered add: (indices at: x) ] ] rounds: rounds / (indices size) text: 'OrderedArray, creation'.
+            self jitRun: [ 1 to: (indices size) do: [ :x | ordered includes: (indices at: x) ] ] rounds: rounds / (indices size) text: 'OrderedArray, selection'.
+        
+            list <- List new.
+            self softRun: [ 1 to: rounds do: [ :x | list add: x ] ] rounds: 1 text: 'List front insert'.
+        
+            list <- List new.
+            self jitRun: [ 1 to: rounds do: [ :x | list add: x ] ] rounds: 1 text: 'List front insert'.
+        
+            indices <- Array new: 10000.
+            1 to: indices size do: [ :x | indices at: x put: (indices size atRandom) ].
+        
+            tree <- Tree new.
+            self softRun: [ 1 to: indices size do: [ :x | tree add: (indices at: x) ] ] rounds: 1 text: 'Tree insert'.
+        
+            tree <- Tree new.
+            self jitRun: [ 1 to: indices size do: [ :x | tree add: (indices at: x) ] ] rounds: 1 text: 'Tree insert'.
+        
+            self run: [ tree collect: [ :x | x * 2 ] ] rounds: 1 text: 'Tree collect'.
+            `)
+    })
 
     it('method error', function() {
         var method = `
